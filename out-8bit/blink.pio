@@ -20,6 +20,23 @@ lp2:
     jmp x-- lp2   ; Delay for the same number of cycles again
 .wrap             ; Blink forever!
 
+;
+; PIO1.SM2 databus control(program databus)
+;
+; IN/OUT_BASE 16, IN/OUT_COUNT: 8(D0-D7)
+; JMP_PIN: 26(RD_Pin)(New assign)
+; SET_BASE: 30(WAIT_Pin)(new assign), 
+;           31(DEBUG_Pin)(new assign)
+;     COUNT: 2
+; 18 instructions
+.program out8bit
+.wrap_target
+    mov pindirs, ~null  ; set PINDIR to all-one (output)
+read_cycle:
+    pull                ; wait for mainCPU event/write data
+    out pins, 8         ; put it to D0-D7
+.wrap
+
 
 % c-sdk {
 // this is a raw helper function for use by the user which sets up the GPIO output, and configures the SM to output on a particular pin
@@ -31,4 +48,21 @@ void blink_program_init(PIO pio, uint sm, uint offset, uint pin) {
    sm_config_set_set_pins(&c, pin, 1);
    pio_sm_init(pio, sm, offset, &c);
 }
+
+void out8bit_program_init(PIO pio, uint sm, uint offset) {
+   // sm ... 3
+   // IN/OUT_BASE: 16(D0), IN/OUT_COUNT: 8(D0-D7)
+   // pin ... SET_BASE: as WAIT_Pin/DEBUG_Pin
+    for (int i = 0; i < 8; ++i)
+        pio_gpio_init(pio, 16 + i);
+    pio_sm_config c = out8bit_program_get_default_config(offset);
+    sm_config_set_in_pins(&c, 16);
+    sm_config_set_in_pin_count(&c, 8);
+    sm_config_set_in_shift(&c, false, false, 32);
+    sm_config_set_out_pins(&c, 16, 8);
+    //sm_config_set_out_shift(&c, true, false, 32);
+    sm_config_set_clkdiv(&c, 1);         // 1 ... full speed 
+    pio_sm_init(pio, sm, offset, &c);
+}
+
 %}

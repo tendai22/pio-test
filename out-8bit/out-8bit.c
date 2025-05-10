@@ -5,7 +5,24 @@
 
 #include "blink.pio.h"
 
+//
+// Pin Definitions
+// This section should be located
+// before #include "blink.pio.h"
+//
+#define DEBUG_Pin 31
+#define WAIT_Pin 30
+#define RFSH_Pin 28
+#define M1_Pin   27
+#define RD_Pin   26
+#define MREQ_Pin 25
+#define IORQ_Pin 24
+#define RESET_Pin 42
+#define BUSAK_Pin 29
+#define BUSRQ_Pin 43
+#define INT_Pin  41
 #define CLK_Pin  40
+#define TEST_Pin 45
 
 void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq) {
     blink_program_init(pio, sm, offset, pin);
@@ -16,6 +33,13 @@ void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq) {
     // PIO counter program takes 3 more cycles in total than we pass as
     // input (wait for n + 1; mov; jmp)
     pio->txf[sm] = (125000 / (2 * freq)) - 3;
+}
+
+void out8bit_forever(PIO pio, uint sm, uint offset) {
+    out8bit_program_init(pio, sm, offset);
+    pio_sm_set_enabled(pio, sm, true);
+
+    printf("out8bit pin start\n");
 }
 
 // UART defines
@@ -31,6 +55,7 @@ void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq) {
 static int toggle_value = 1;
 #define TOGGLE() do {    gpio_xor_mask64(((uint64_t)1)<<TEST_Pin); } while(0)
 
+
 void gpio_out_init(uint gpio, bool value) {
     gpio_set_dir(gpio, GPIO_OUT);
     gpio_put(gpio, value);
@@ -40,6 +65,9 @@ void gpio_out_init(uint gpio, bool value) {
 int main()
 {
     stdio_init_all();
+
+    gpio_out_init(TEST_Pin, false);
+    gpio_out_init(RESET_Pin, false);
 
     // Set up our UART
     uart_init(UART_ID, BAUD_RATE);
@@ -55,6 +83,11 @@ int main()
     printf("Loaded program at %d\n", offset);
     
     blink_pin_forever(pio, 0, offset, CLK_Pin, 3);
+
+    offset = pio_add_program(pio, &out8bit_program);
+    printf("Loaded program at %d\n", offset);
+    out8bit_forever(pio, 2, offset);
+
     // For more pio examples see https://github.com/raspberrypi/pico-examples/tree/master/pio
 
     
@@ -66,8 +99,15 @@ int main()
     
     // For more examples of UART use see https://github.com/raspberrypi/pico-examples/tree/master/uart
 
+    gpio_put(RESET_Pin, true);
+
+    uint32_t count = 0;
     while (true) {
-        printf("Hello, world!\n");
-        sleep_ms(1000);
+        TOGGLE();
+        pio_sm_put(pio, 2, count);
+        count += 1;
+        sleep_us(10);
+        TOGGLE();
+        sleep_ms(2);
     }
 }
